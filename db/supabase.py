@@ -191,7 +191,7 @@ CREATE TABLE IF NOT EXISTS appointments (
 -- Conversations table (matches Supabase table definition)
 CREATE TABLE IF NOT EXISTS public.conversations (
     id UUID NOT NULL DEFAULT extensions.uuid_generate_v4(),
-    user_id UUID NULL,
+    user_id UUID REFERENCES users(id) ON DELETE SET NULL,
     summary TEXT NULL,
     appointments_discussed JSONB NULL DEFAULT '[]'::jsonb,
     preferences_mentioned JSONB NULL DEFAULT '[]'::jsonb,
@@ -200,14 +200,13 @@ CREATE TABLE IF NOT EXISTS public.conversations (
     created_at TIMESTAMP WITH TIME ZONE NULL DEFAULT NOW(),
     room_name VARCHAR(255) NULL,
     duration_seconds INTEGER NULL,
-    CONSTRAINT conversations_pkey PRIMARY KEY (id),
-    CONSTRAINT conversations_user_id_fkey FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE SET NULL
+    CONSTRAINT conversations_pkey PRIMARY KEY (id)
 );
 
 -- Indexes for performance
 CREATE INDEX IF NOT EXISTS idx_users_contact ON users(contact_number);
 CREATE INDEX IF NOT EXISTS idx_appointments_user ON appointments(user_id);
 CREATE INDEX IF NOT EXISTS idx_appointments_date_time ON appointments(date, time);
-CREATE INDEX IF NOT EXISTS idx_conversations_user ON public.conversations USING btree (user_id);
 CREATE INDEX IF NOT EXISTS idx_conversations_room ON public.conversations USING btree (room_name);
+CREATE INDEX IF NOT EXISTS idx_conversations_user ON public.conversations(user_id);
 """
