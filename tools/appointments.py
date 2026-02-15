@@ -70,10 +70,16 @@ def create_appointment_tools(ctx: AppointmentContext) -> list:
                 "is_new": user.get("name") is None
             }
 
-            greeting = f"Welcome back, {ctx.current_user_name}!" if ctx.current_user_name else "I've identified you by your phone number."
+            if ctx.current_user_name:
+                greeting = f"Welcome back, {ctx.current_user_name}!"
+                name_status = ""
+            else:
+                greeting = "I've identified you by your phone number."
+                name_status = " IMPORTANT: The user's name is NOT on file. You MUST ask for their name before proceeding with any other request."
+
             ctx.notify_tool_call("identify_user", {"phone": phone_clean, "name": name}, result_data)
 
-            return f"User identified successfully. {greeting} User ID: {ctx.current_user_id}"
+            return f"User identified successfully. {greeting} User ID: {ctx.current_user_id}.{name_status}"
 
         except Exception as e:
             logger.error(f"Error identifying user: {e}")
