@@ -17,59 +17,94 @@ A production-ready Python backend for AI-powered voice-based appointment schedul
 
 ## Architecture
 
-```
-┌─────────────────────────────────────────────────────────────────────────┐
-│                           VOICE AGENT SERVICE                            │
-│                                                                          │
-│  ┌────────────────────────────────────────────────────────────────────┐ │
-│  │                      Agent Session Pipeline                         │ │
-│  │                                                                     │ │
-│  │  Audio In ──► VAD ──► STT ──► LLM ──► Tool Router ──► TTS ──► Audio│ │
-│  │              │        │       │              │          │          │ │
-│  │           Silero  Deepgram  OpenAI    ┌──────┴──────┐ Cartesia    │ │
-│  │                              GPT-4o   │   Tools     │              │ │
-│  │                                       │ ┌─────────┐ │              │ │
-│  │                                       │ │identify │ │              │ │
-│  │                                       │ │book     │ │              │ │
-│  │                                       │ │modify   │ │              │ │
-│  │                                       │ │cancel   │ │              │ │
-│  │                                       │ │slots    │ │              │ │
-│  │                                       │ └─────────┘ │              │ │
-│  │                                       └─────────────┘              │ │
-│  └────────────────────────────────────────────────────────────────────┘ │
-│                                    │                                     │
-│                                    ▼                                     │
-│  ┌──────────────────┐    ┌──────────────────┐    ┌──────────────────┐  │
-│  │  Usage Collector │    │  Data Channel    │    │  Avatar Service  │  │
-│  │   (Cost Metrics) │    │  (Tool Events)   │    │(Beyond Presence) │  │
-│  └──────────────────┘    └──────────────────┘    └──────────────────┘  │
-└─────────────────────────────────────────────────────────────────────────┘
-                                    │
-                                    ▼
-┌─────────────────────────────────────────────────────────────────────────┐
-│                             TOKEN SERVER                                 │
-│                            (FastAPI + Uvicorn)                          │
-│                                                                          │
-│   POST /token ────► Generate LiveKit Access Token                       │
-│   GET  /summary/{room} ────► Retrieve Conversation Summary              │
-│   GET  / ────► Health Check                                             │
-└─────────────────────────────────────────────────────────────────────────┘
-                                    │
-                                    ▼
-┌─────────────────────────────────────────────────────────────────────────┐
-│                         SUPABASE (PostgreSQL)                           │
-│                                                                          │
-│   ┌───────────┐    ┌────────────────┐    ┌─────────────────────┐       │
-│   │   users   │◄───│  appointments  │    │    conversations    │       │
-│   │           │    │                │    │                     │       │
-│   │ • id      │    │ • id           │    │ • id                │       │
-│   │ • phone   │    │ • user_id (FK) │    │ • user_id (FK)      │       │
-│   │ • name    │    │ • date         │    │ • room_name         │       │
-│   │ • created │    │ • time         │    │ • summary           │       │
-│   └───────────┘    │ • slot         │    │ • transcript        │       │
-│                    │ • status       │    │ • cost_breakdown    │       │
-│                    └────────────────┘    └─────────────────────┘       │
-└─────────────────────────────────────────────────────────────────────────┘
+```mermaid
+flowchart TB
+    %% =========================
+    %% Voice Agent Service
+    %% =========================
+    subgraph VoiceAgentService["VOICE AGENT SERVICE"]
+        
+        %% Agent Session Pipeline
+        subgraph AgentSession["Agent Session Pipeline"]
+            AudioIn["Audio In"]
+            VAD["VAD\n(Silero)"]
+            STT["STT\n(Deepgram)"]
+            LLM["LLM\n(OpenAI GPT-4o)"]
+            ToolRouter["Tool Router"]
+            TTS["TTS\n(Cartesia)"]
+            AudioOut["Audio Out"]
+
+            AudioIn --> VAD --> STT --> LLM --> ToolRouter --> TTS --> AudioOut
+
+            %% Tools
+            subgraph Tools["Tools"]
+                Identify["identify"]
+                Book["book"]
+                Modify["modify"]
+                Cancel["cancel"]
+                Slots["slots"]
+            end
+
+            LLM --> ToolRouter
+            ToolRouter --> Tools
+        end
+
+        %% Side services
+        UsageCollector["Usage Collector\n(Cost Metrics)"]
+        DataChannel["Data Channel\n(Tool Events)"]
+        AvatarService["Avatar Service\n(Beyond Presence)"]
+
+        AgentSession --> UsageCollector
+        AgentSession --> DataChannel
+        AgentSession --> AvatarService
+    end
+
+    %% =========================
+    %% Token Server
+    %% =========================
+    subgraph TokenServer["TOKEN SERVER\n(FastAPI + Uvicorn)"]
+        TokenEndpoint["POST /token\nGenerate LiveKit Access Token"]
+        SummaryEndpoint["GET /summary/{room}\nRetrieve Conversation Summary"]
+        HealthEndpoint["GET /\nHealth Check"]
+    end
+
+    %% =========================
+    %% Supabase (PostgreSQL)
+    %% =========================
+    subgraph Supabase["SUPABASE (PostgreSQL)"]
+        subgraph UsersTable["users"]
+            u_id["id"]
+            u_phone["phone"]
+            u_name["name"]
+            u_created["created_at"]
+        end
+
+        subgraph AppointmentsTable["appointments"]
+            a_id["id"]
+            a_user["user_id (FK)"]
+            a_date["date"]
+            a_time["time"]
+            a_slot["slot"]
+            a_status["status"]
+        end
+
+        subgraph ConversationsTable["conversations"]
+            c_id["id"]
+            c_user["user_id (FK)"]
+            c_room["room_name"]
+            c_summary["summary"]
+            c_transcript["transcript"]
+            c_cost["cost_breakdown"]
+        end
+
+        UsersTable --> AppointmentsTable
+        UsersTable --> ConversationsTable
+    end
+
+    %% Top-level data flow
+    VoiceAgentService --> TokenServer
+    TokenServer --> Supabase
+
 ```
 
 ## Tech Stack
